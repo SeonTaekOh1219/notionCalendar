@@ -1,0 +1,36 @@
+name: Sync Notion to Google Calendar
+
+on:
+  schedule:
+    # UTC 기준이지만 N분마다는 시간대와 무관하다.
+    # 30분 간격. 무료 사용량이 넉넉하면 */10 으로 줄여도 된다.
+    - cron: "*/30 * * * *"
+  # Actions 탭에서 손으로 즉시 실행할 수 있게 해준다
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call sync endpoint
+        run: |
+          status=$(curl -sS --max-time 120 \
+            -o response.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.SYNC_URL }}")
+
+          echo "HTTP $status"
+          cat response.json
+          echo
+
+          if [ "$status" != "200" ]; then
+            echo "::error::동기화 실패 (HTTP $status)"
+            exit 1
+          fi
+
+          # 코드가 개별 항목 실패를 failed 카운트로 돌려주므로, 그것도 실패로 본다
+          if grep -q '"failed":[1-9]' response.json; then
+            echo "::error::일부 일정 동기화 실패"
+            exit 1
+          fi
